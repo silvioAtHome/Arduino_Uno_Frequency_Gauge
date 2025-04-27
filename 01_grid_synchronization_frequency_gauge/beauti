@@ -1,0 +1,3 @@
+#!/bin/bash
+astyle --recursive --style=allman --indent=spaces=2 --indent-switches --pad-oper --pad-header --unpad-paren --align-pointer=name --align-reference=name --add-brackets --min-conditional-indent=0 --keep-one-line-statements --convert-tabs --max-code-length=79 --break-after-logical --lineend=linux "*.c"
+
