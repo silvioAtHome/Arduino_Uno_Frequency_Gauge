@@ -22,7 +22,7 @@ set yrange [49.5:51.5]
 plot "testdata.dat" u 2:5 t "fgrid" w l, "" u 2:6 t "finternal" w l
 
 set key right
-set yrange [42000:48000]
+set yrange [20000:40000]
 plot "testdata.dat" u 2:9 w lines t "isr_timer"
 
 set yrange [-0.5:0.5]

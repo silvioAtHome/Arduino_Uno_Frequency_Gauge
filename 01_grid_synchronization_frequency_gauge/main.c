@@ -9,14 +9,21 @@
 
 // #define ISRTIMERFREQUENCY 72e6
 // ISRTIMERFREQUENCY / 16 = 4.5 MHz
-#define ISRTIMERFREQUENCY 4.5e6
+#define ISRTIMERFREQUENCY 16.0e6
 
 /* Grenzen
-16 bit  @ 4.5MHz 14.56 ms .. 68.66 Hz
-47 Hz:
-4.5e6/(47*2) = 47872.34
+
+47 Hz
+16e6/(2*47) -2*2^16
+ ans  =
+ 
+    39140.766  
+    
 53 Hz:
-4.5e6/(53*2) = 42452.83 
+16e6/(2*53) -2*2^16
+ ans  =
+ 
+    19871.396
 
 */
 
@@ -51,7 +58,7 @@ int main(int argc, char **argv)
 
   int i;
   float fstart, fgrid, phase;
-  uint16_t isr_timer;
+  int isr_timer,isr_total;
   float time = 0.0, internal_speed, vgrid, grid_phase,vgrid_old,df;
   float phasedetector, filt;
 
@@ -83,7 +90,7 @@ int main(int argc, char **argv)
   time = 0.0;
   internal_speed = fstart;
 
-  isr_timer = ((int)(ISRTIMERFREQUENCY / (2*internal_speed))); // 100 Hz
+  isr_timer = 0;
   printf("# max ISR Timer at f_min %i\n", isr_timer);
 
   while (i < 500)
@@ -106,25 +113,27 @@ int main(int argc, char **argv)
     filt = phasedetector;
     vgrid_old = vgrid;
 
-    // P-Anteil 2500, 500
-    isr_timer = (int)(ISRTIMERFREQUENCY / (2.0*internal_speed) - 2500.0 * filt);
-    if(isr_timer < 42452) 
+    // P-Anteil 5000
+    isr_total = (int)(ISRTIMERFREQUENCY / (2.0*internal_speed) - 5000.0 * filt);
+    isr_timer = isr_total - 2*65535;
+    
+    if(isr_timer < 19871) 
     {
-    	isr_timer = 42452;
+    	isr_timer = 19871;
     }
-    if(isr_timer > 47872) 
+    if(isr_timer > 39140) 
     {
-    	isr_timer = 47872;
+    	isr_timer = 39140;
     }
-    // I-Anteil 0.25, 0.02
-    internal_speed += 0.35 * filt;
+    // I-Anteil 0.35
+    internal_speed += 0.1 * filt;
     if (internal_speed < 47.0f) internal_speed = 47.0f;
     if (internal_speed > 53.0f) internal_speed = 53.0f;
 
     printf("%i %f %f %f %f %f %f %f %i\n", i, time, vgrid, grid_phase, fgrid + df, internal_speed, phasedetector, filt,isr_timer);
 
     i++;
-    time += ((float) isr_timer + 1) / ISRTIMERFREQUENCY;
+    time += ((float) (isr_timer + 2*65535) + 1) / ISRTIMERFREQUENCY;
   }
 
 }
