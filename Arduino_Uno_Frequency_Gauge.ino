@@ -24,7 +24,7 @@ volatile float internal_speed = 50.0f;
 
 void setup() {
 
-/* init ADC */
+  /* init ADC */
   ADMUX = (1 << REFS0); //AVCC with external capacitor at AREF pin
   ADCSRA = _BV(ADEN); // enable ADC
   ADCSRB = 0;
@@ -37,7 +37,7 @@ void setup() {
   pinMode(4, OUTPUT);// Stepper 3
   pinMode(5, OUTPUT);// Stepper 4
 
-/* init serial */
+  /* init serial */
   Serial.begin(115200);
 
   /* init Timer */
@@ -62,28 +62,29 @@ void setup() {
 ISR(TIMER1_COMPA_vect)
 {
   static uint8_t number_of_call = 0, tick_cnt = 0,ready,i;
-  bool pattern[8] = {true, true, false, false, false, false, false, false};
+  bool pattern[8] = {
+    true, true, false, false, false, false, false, false  };
   static uint8_t stepper = 0;
   static int isr_timer = 28928; // default 50 Hz
   int isr_total;
   float vgrid,phasedetector;
   static float vgrid_old=0.0f;
-  
+
 
   number_of_call++;
   number_of_call%=3;
-  
+
   OCR1A = 0xffff-1;
   if(number_of_call==2)
   {
     OCR1A = (uint16_t) isr_timer;
   }
-      
+
   if(number_of_call != 0)
   {
     return;
   }
-  
+
   /* read adc channel 0 */
   ADMUX  &=  0xf0;
   ADMUX |=  0; // Select ADC Channel
@@ -92,27 +93,27 @@ ISR(TIMER1_COMPA_vect)
 
   vgrid = (float) ((int16_t)ADC-512) / 512.0f;
 
-    if(i % 2) 
-    {
-      phasedetector = vgrid-vgrid_old;
-    }
-    else
-    {
-      phasedetector = -vgrid+vgrid_old;
-    }
-    i++;
-    vgrid_old = vgrid;
-  
-// P-Anteil
-isr_total = (int)(ISRTIMERFREQUENCY / (2.0*internal_speed) - 5000.0 * phasedetector);
-    isr_timer = isr_total - 2*65535;
+  if(i % 2) 
+  {
+    phasedetector = vgrid-vgrid_old;
+  }
+  else
+  {
+    phasedetector = -vgrid+vgrid_old;
+  }
+  i++;
+  vgrid_old = vgrid;
+
+  // P-Anteil
+  isr_total = (int)(ISRTIMERFREQUENCY / (2.0*internal_speed) - 5000.0 * phasedetector);
+  isr_timer = isr_total - 2*65535;
   if (isr_timer < 19871) isr_timer = 19871;
   if (isr_timer > 39140) isr_timer = 39140;
 
   // I-Anteil
   internal_speed += 0.1 * phasedetector;
-    if (internal_speed < 47.0f) internal_speed = 47.0f;
-    if (internal_speed > 53.0f) internal_speed = 53.0f;
+  if (internal_speed < 47.0f) internal_speed = 47.0f;
+  if (internal_speed > 53.0f) internal_speed = 53.0f;
 
   if( fabsf(phasedetector) < 0.1f)
   {
@@ -124,19 +125,19 @@ isr_total = (int)(ISRTIMERFREQUENCY / (2.0*internal_speed) - 5000.0 * phasedetec
     ready=100;
   }
 
-  
+
   tick_cnt++;
   tick_cnt%=100; // once a second
   if(tick_cnt==0) tick= true;
-  
+
   stepper++;
-    stepper++;
+  stepper++;
   stepper%=8;
   /*digitalWrite(3, pattern[stepper]);
-  digitalWrite(5, pattern[(stepper + 4) % 8]);
-  digitalWrite(2, pattern[(stepper + 2) % 8]);
-  digitalWrite(4, pattern[(stepper + 6) % 8]);
-  */
+   digitalWrite(5, pattern[(stepper + 4) % 8]);
+   digitalWrite(2, pattern[(stepper + 2) % 8]);
+   digitalWrite(4, pattern[(stepper + 6) % 8]);
+   */
 
 }
 
@@ -149,3 +150,4 @@ void loop() {
     Serial.println(internal_speed,3);
   }
 }
+
