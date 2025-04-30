@@ -1,4 +1,6 @@
 *.png
 sim.exe
 testdata.dat
+data*.txt
+
 
