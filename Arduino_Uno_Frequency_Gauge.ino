@@ -1,26 +1,32 @@
 /*
 
- 
- PIN 13 / PB7 is LED "L"
- 
- ISR Tic-Timer1 16bit (Arduino-Pin 9,10 .. PB1,PB2) pins are not used
- 
- 50 Hz / 100 half periodes is 10 ms
- at 16 MHz clock it is 2.44 times a full 16 bit timer 1 register
- od 2 full 2^16 an 28928 of the third call
- 
- Stepper (40s per revolution at 100 and half steps):
- Pin2 blue
- Pin3 Pink
- Pin4 Yellow
- Pin5 Orange
- 
- */
+
+  PIN 13 / PB7 is LED "L"
+
+  ISR Tic-Timer1 16bit (Arduino-Pin 9,10 .. PB1,PB2) pins are not used
+
+  50 Hz / 100 half periodes is 10 ms
+  at 16 MHz clock it is 2.44 times a full 16 bit timer 1 register
+  od 2 full 2^16 an 28928 of the third call
+
+  Stepper (40s per revolution at 100 and half steps):
+  Pin2 blue
+  Pin3 Pink
+  Pin4 Yellow
+  Pin5 Orange
+
+  X27.168 315 Grad das sind ca. 945 steps in der Tabelle
+
+  Buzzer Timer 2, Pin 11 (PB3, OC2A)
+
+
+*/
 
 volatile bool tick = false;
 volatile bool locked_to_grid = false;
 volatile float internal_speed = 50.0f;
-#define ISRTIMERFREQUENCY 16.0e6
+volatile int16_t stepper_pos = 0;
+#define ISRTIMERFREQUENCY 16.003e6
 
 void setup() {
 
@@ -36,6 +42,15 @@ void setup() {
   pinMode(3, OUTPUT);// Stepper 2
   pinMode(4, OUTPUT);// Stepper 3
   pinMode(5, OUTPUT);// Stepper 4
+
+  pinMode(11, OUTPUT);// Buzzer
+  //digitalWrite(10, true);
+
+  pinMode(8, INPUT_PULLUP);//
+  pinMode(9, INPUT_PULLUP);//
+
+
+
 
   /* init serial */
   Serial.begin(115200);
@@ -53,6 +68,15 @@ void setup() {
   TIMSK1 |= (1 << OCIE1A);  /* enable timer interrupt on output compare A */
   TCNT1 = 0;
 
+  /* PWM Timer2 */
+  /* OC2A ist Pin 11/PB3 */
+  //DDRB |= (1 << PB3); /* enable output */
+  TCCR2A = (1 << COM2A0);
+  TCNT2 = 0;
+  // OCR2A = 100;
+  /* enable clock for pwm, no prescaler f_pwm = 8e6/510 = 15686.275 Hz, DS p 124 */
+  TCCR2B = (1 << CS21);  /* prescaler = 64 */
+
   interrupts();  // enable all interrupts
   /* start all timer synchronuously */
   //GTCCR = 0; // release all timers
@@ -61,26 +85,28 @@ void setup() {
 /* timer 1 ISR for setting the PWM channels */
 ISR(TIMER1_COMPA_vect)
 {
-  static uint8_t number_of_call = 0, tick_cnt = 0,ready,i;
-  bool pattern[8] = {
-    true, true, false, false, false, false, false, false  };
-  static uint8_t stepper = 0;
+  static uint8_t number_of_call = 0, tick_cnt = 0, ready, i, init_probing = 3, buzzer_cntdwn = 0 , buzzer_freq = 0;
+  int16_t stepper_command = 0;
+  bool pattern[6] = {
+    true, true, false, false, false, false
+  };
+  static int8_t stepper = 0;
   static int isr_timer = 28928; // default 50 Hz
   int isr_total;
-  float vgrid,phasedetector;
-  static float vgrid_old=0.0f;
+  float vgrid, phasedetector, helpf;
+  static float vgrid_old = 0.0f;
 
 
   number_of_call++;
-  number_of_call%=3;
+  number_of_call %= 3;
 
-  OCR1A = 0xffff-1;
-  if(number_of_call==2)
+  OCR1A = 0xffff - 1;
+  if (number_of_call == 2)
   {
     OCR1A = (uint16_t) isr_timer;
   }
 
-  if(number_of_call != 0)
+  if (number_of_call != 0)
   {
     return;
   }
@@ -91,22 +117,22 @@ ISR(TIMER1_COMPA_vect)
   ADCSRA |= _BV(ADSC); // Start conversion
   while ( (ADCSRA & _BV(ADSC)) ); // wait for finishing
 
-  vgrid = (float) ((int16_t)ADC-512) / 512.0f;
+  vgrid = (float) ((int16_t)ADC - 512) / 512.0f;
 
-  if(i % 2) 
+  if (i % 2)
   {
-    phasedetector = vgrid-vgrid_old;
+    phasedetector = vgrid - vgrid_old;
   }
   else
   {
-    phasedetector = -vgrid+vgrid_old;
+    phasedetector = -vgrid + vgrid_old;
   }
   i++;
   vgrid_old = vgrid;
 
   // P-Anteil
-  isr_total = (int)(ISRTIMERFREQUENCY / (2.0*internal_speed) - 5000.0 * phasedetector);
-  isr_timer = isr_total - 2*65535;
+  isr_total = (int)(ISRTIMERFREQUENCY / (2.0 * internal_speed) - 5000.0 * phasedetector);
+  isr_timer = isr_total - 2 * 65535;
   if (isr_timer < 19871) isr_timer = 19871;
   if (isr_timer > 39140) isr_timer = 39140;
 
@@ -115,39 +141,97 @@ ISR(TIMER1_COMPA_vect)
   if (internal_speed < 47.0f) internal_speed = 47.0f;
   if (internal_speed > 53.0f) internal_speed = 53.0f;
 
-  if( fabsf(phasedetector) < 0.1f)
+  if ( fabsf(phasedetector) < 0.1f)
   {
-    if(ready > 0)ready--;
-    if(ready == 0) locked_to_grid = true;
+    if (ready > 0)ready--;
+    if (ready == 0) locked_to_grid = true;
   }
   else
   {
-    ready=100;
+    ready = 100;
   }
 
-
   tick_cnt++;
-  tick_cnt%=100; // once a second
-  if(tick_cnt==0) tick= true;
+  tick_cnt %= 100; // once a second
+  if (tick_cnt == 0) tick = true;
 
-  stepper++;
-  stepper++;
-  stepper%=8;
-  /*digitalWrite(3, pattern[stepper]);
-   digitalWrite(5, pattern[(stepper + 4) % 8]);
-   digitalWrite(2, pattern[(stepper + 2) % 8]);
-   digitalWrite(4, pattern[(stepper + 6) % 8]);
-   */
+  if (init_probing == 3 && stepper_pos == 0)
+  {
+    stepper_pos = 945;
+    init_probing = 2;
+  }
+  if (init_probing == 2 && stepper_pos == 0)
+  {
+    stepper_pos = -945 / 2;
+    init_probing = 1;
+  }
+  if (init_probing == 1 && stepper_pos == 0)
+  {
+    init_probing = 0;
+  }
+  if (init_probing == 0)
+  {
+    stepper_command = (int16_t)(300.0 * (internal_speed - 50.0f));
+  }
 
+  if (stepper_pos - stepper_command < 0)
+  {
+    stepper++;
+    stepper_pos++;
+  }
+
+  if (stepper_pos - stepper_command > 0)
+  {
+    stepper--;
+    stepper_pos--;
+    if (stepper < 0)
+    {
+      stepper += 6;
+    }
+  }
+
+  stepper %= 6;
+  digitalWrite(2, pattern[stepper]);
+  digitalWrite(3, pattern[(stepper + 3) % 6]);
+
+  digitalWrite(4, pattern[(stepper + 1) % 6]);
+  digitalWrite(5, pattern[(stepper + 4) % 6]);
+
+
+  /* buzzer control */
+  helpf = fabsf(internal_speed - 50.0f);
+
+  if (buzzer_cntdwn > 0)
+  {
+    TCCR2A = (1 << COM2A0);
+    buzzer_cntdwn--;
+  }
+  else
+  {
+    TCCR2A = 0;
+    if (buzzer_freq > 0)
+    {
+      buzzer_freq--;
+    }
+    else
+    {
+      if (helpf > 0.05)
+      {
+        buzzer_freq = (uint8_t) (2.5 / helpf);
+        buzzer_cntdwn = 5;
+      }
+    }
+  }
 }
 
 void loop() {
 
-  if(tick)
+  if (tick)
   {
-    tick= false;
-    digitalWrite(13,!digitalRead(13));
-    Serial.println(internal_speed,3);
+    tick = false;
+    digitalWrite(13, !digitalRead(13));
+    Serial.print(internal_speed, 3);
+    Serial.print(" ");
+    Serial.println(stepper_pos);
   }
 }
-
