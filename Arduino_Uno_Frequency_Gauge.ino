@@ -215,9 +215,9 @@ ISR(TIMER1_COMPA_vect)
     }
     else
     {
-      if (helpf > 0.05)
+      if (helpf > 0.1)
       {
-        buzzer_freq = (uint8_t) (2.5 / helpf);
+        buzzer_freq = (uint8_t) (5.0 / helpf);
         buzzer_cntdwn = 5;
       }
     }
